@@ -4,36 +4,44 @@ const path = require('node:path');
 
 /**
  * Build the parent-info chain for breadcrumb navigation.
- * Mirrors com.net128.oss.web.lib.filemanager.ParentInfoUtil.
+ * Stops at the configured root directory (never exposes paths above it).
  *
- * @param {string} dirPath – absolute, forward-slash–normalised path
+ * @param {string} dirPath – absolute real path
+ * @param {string} [root='/'] – root jail directory
  * @returns {{ path: string, name: string }[]}
  */
-function getParentInfo(dirPath) {
+function getParentInfo(dirPath, root) {
+    root = root ? path.resolve(root) : '/';
     const parents = [];
     let current = path.resolve(dirPath);
     let parent = path.dirname(current);
 
-    while (parent !== current) {
-        const name = path.basename(parent) || '>';
+    while (parent !== current && current !== root) {
+        // Convert parent to virtual path
+        const virtualParent = toVirtualPath(parent, root);
+        const name = virtualParent === '/' ? '>' : path.basename(parent);
         parents.push({
-            path: toUniversalPath(parent),
+            path: virtualParent,
             name: name,
         });
         current = parent;
         parent = path.dirname(current);
     }
 
-    // On Windows with multiple drive roots the Java version adds a virtual "/" root.
-    // We replicate the same behaviour: if the top-most entry's name is empty, set it.
-    if (parents.length > 0) {
-        const last = parents[parents.length - 1];
-        if (!last.name || last.name === '') {
-            last.name = '>';
-        }
-    }
-
     return parents;
+}
+
+/**
+ * Convert a real filesystem path to a virtual path relative to root.
+ */
+function toVirtualPath(realPath, root) {
+    if (!root || root === '/') return toUniversalPath(realPath);
+    const resolved = path.resolve(realPath);
+    const rootResolved = path.resolve(root);
+    let relative = path.relative(rootResolved, resolved);
+    if (relative === '') return '/';
+    relative = relative.split(path.sep).join('/');
+    return '/' + relative;
 }
 
 /**

@@ -36,40 +36,78 @@ function mimeType(filePath) {
 
 /**
  * File Manager Service — mirrors FileManagerService.java
+ *
+ * @param {object} [options]
+ * @param {string} [options.root='/'] — root directory; all operations are jailed inside it
  */
 class FileManagerService {
+    constructor(options = {}) {
+        this.root = path.resolve(options.root || '/');
+    }
+
+    /**
+     * Convert a virtual path (as seen by the client) to a real filesystem path,
+     * ensuring it stays inside the configured root.
+     * @param {string} virtualPath — e.g. "/" or "/documents/readme.md"
+     * @returns {string} absolute real path
+     */
+    toRealPath(virtualPath) {
+        virtualPath = toPlatformPath(virtualPath || '/');
+        // Resolve relative to root (strip leading / so it's treated as relative)
+        const stripped = virtualPath.replace(/^[/\\]+/, '');
+        const resolved = path.resolve(this.root, stripped);
+        // Jail check: resolved must be at or inside root
+        if (!resolved.startsWith(this.root)) {
+            throw Object.assign(new Error('Access denied: path outside root'), { status: 403 });
+        }
+        return resolved;
+    }
+
+    /**
+     * Convert a real filesystem path to a virtual path (as seen by the client).
+     * The root directory maps to "/".
+     * @param {string} realPath
+     * @returns {string} virtual path with forward slashes
+     */
+    toVirtualPath(realPath) {
+        const resolved = path.resolve(realPath);
+        let relative = path.relative(this.root, resolved);
+        if (relative === '') return '/';
+        // Ensure forward slashes
+        relative = relative.split(path.sep).join('/');
+        return '/' + relative;
+    }
+
     /**
      * List directory contents.
-     * @param {string} dirPath
-     * @returns {object} DirectoryInfo
+     * @param {string} virtualPath
+     * @returns {object} DirectoryInfo (with virtual paths)
      */
-    listDirectory(dirPath) {
-        return buildDirectoryInfo(dirPath);
+    listDirectory(virtualPath) {
+        const realPath = this.toRealPath(virtualPath);
+        return buildDirectoryInfo(realPath, this.root);
     }
 
     /**
      * Resolve an existing file/directory or throw.
-     * @param {string} filePath
-     * @returns {string} resolved absolute path
+     * @param {string} virtualPath
+     * @returns {string} resolved absolute real path
      */
-    resolveExisting(filePath) {
-        filePath = toPlatformPath(filePath);
-        if (!filePath) throw Object.assign(new Error('Path must not be null'), { status: 400 });
-        const resolved = path.resolve(filePath);
+    resolveExisting(virtualPath) {
+        const resolved = this.toRealPath(virtualPath);
         if (!fs.existsSync(resolved)) {
-            throw Object.assign(new Error('File not found: ' + filePath), { status: 404 });
+            throw Object.assign(new Error('File not found'), { status: 404 });
         }
         return resolved;
     }
 
     /**
      * Download a file (attachment).
-     * Sets Content-Disposition: attachment.
-     * @param {string} filePath
+     * @param {string} virtualPath
      * @param {import('express').Response} res
      */
-    downloadFile(filePath, res) {
-        const resolved = this.resolveExisting(filePath);
+    downloadFile(virtualPath, res) {
+        const resolved = this.resolveExisting(virtualPath);
         const stat = fs.statSync(resolved);
         if (!stat.isFile()) {
             return res.status(400).json({ error: 'Path is not a file' });
@@ -83,11 +121,11 @@ class FileManagerService {
 
     /**
      * View a file inline.
-     * @param {string} filePath
+     * @param {string} virtualPath
      * @param {import('express').Response} res
      */
-    viewFile(filePath, res) {
-        const resolved = this.resolveExisting(filePath);
+    viewFile(virtualPath, res) {
+        const resolved = this.resolveExisting(virtualPath);
         const stat = fs.statSync(resolved);
         if (!stat.isFile()) {
             return res.status(400).json({ error: 'Path is not a file' });
@@ -100,11 +138,11 @@ class FileManagerService {
 
     /**
      * Download a file or directory as a ZIP archive.
-     * @param {string} filePath
+     * @param {string} virtualPath
      * @param {import('express').Response} res
      */
-    zipDownload(filePath, res) {
-        const resolved = this.resolveExisting(filePath);
+    zipDownload(virtualPath, res) {
+        const resolved = this.resolveExisting(virtualPath);
         const baseName = path.basename(resolved);
         const downloadName = baseName + '.zip';
 
@@ -126,43 +164,48 @@ class FileManagerService {
 
     /**
      * Recursively delete a file or directory.
-     * @param {string} filePath
+     * @param {string} virtualPath
      */
-    async deleteFileOrDirectory(filePath) {
-        const resolved = this.resolveExisting(filePath);
+    async deleteFileOrDirectory(virtualPath) {
+        const resolved = this.resolveExisting(virtualPath);
+        // Never allow deleting the root itself
+        if (resolved === this.root) {
+            throw Object.assign(new Error('Cannot delete root directory'), { status: 403 });
+        }
         await fsp.rm(resolved, { recursive: true, force: true });
     }
 
     /**
      * Upload files to a directory.
-     * @param {string} dirPath — target directory
+     * @param {string} virtualPath — target directory
      * @param {Array<{originalname: string, buffer: Buffer}>} files — multer files
      */
-    async uploadFiles(dirPath, files) {
-        const resolved = this.resolveExisting(dirPath);
+    async uploadFiles(virtualPath, files) {
+        const resolved = this.resolveExisting(virtualPath);
         const stat = fs.statSync(resolved);
         if (!stat.isDirectory()) {
-            throw Object.assign(new Error('Target path is not a directory: ' + dirPath), { status: 400 });
+            throw Object.assign(new Error('Target path is not a directory'), { status: 400 });
         }
         for (const file of files) {
             if (!file.originalname || file.originalname.trim() === '') continue;
-            const dest = path.join(resolved, file.originalname);
+            // Prevent path traversal in uploaded filenames
+            const safeName = path.basename(file.originalname);
+            const dest = path.join(resolved, safeName);
             await fsp.writeFile(dest, file.buffer);
         }
     }
 
     /**
      * Change file permissions.
-     * @param {string} filePath
+     * @param {string} virtualPath
      * @param {string} mode — e.g. "+rw", "-x"
      */
-    changeMode(filePath, mode) {
-        const resolved = this.resolveExisting(filePath);
+    changeMode(virtualPath, mode) {
+        const resolved = this.resolveExisting(virtualPath);
         const stat = fs.statSync(resolved);
         let currentMode = stat.mode;
         const add = mode.startsWith('+');
 
-        // Owner permission bits
         if (mode.includes('r')) {
             currentMode = add ? (currentMode | 0o400) : (currentMode & ~0o400);
         }
@@ -179,9 +222,6 @@ class FileManagerService {
 
 /**
  * Recursively add a directory's contents to a yazl ZipFile.
- * @param {import('yazl').ZipFile} zip
- * @param {string} dirPath — absolute path on disk
- * @param {string} zipPrefix — path prefix inside the zip
  */
 function addDirectoryToZip(zip, dirPath, zipPrefix) {
     for (const entry of fs.readdirSync(dirPath, { withFileTypes: true })) {

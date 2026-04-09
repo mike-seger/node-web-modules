@@ -5,20 +5,37 @@ const path = require('node:path');
 const { getParentInfo, toUniversalPath } = require('./parent-info');
 
 /**
+ * Convert a real filesystem path to a virtual path relative to root.
+ * @param {string} realPath
+ * @param {string} root
+ * @returns {string} virtual path with forward slashes
+ */
+function toVirtualPath(realPath, root) {
+    if (!root || root === '/') return toUniversalPath(realPath);
+    const resolved = path.resolve(realPath);
+    const rootResolved = path.resolve(root);
+    let relative = path.relative(rootResolved, resolved);
+    if (relative === '') return '/';
+    relative = relative.split(path.sep).join('/');
+    return '/' + relative;
+}
+
+/**
  * Build a FileInfo object for a single file/directory.
  * Mirrors com.net128.oss.web.lib.filemanager.DirectoryInfo.FileInfo.
+ *
+ * @param {string} filePath — real absolute path
+ * @param {string} root — root jail directory
  */
-function buildFileInfo(filePath) {
+function buildFileInfo(filePath, root) {
     const info = {};
-    const parentDir = path.dirname(filePath);
-    info.parent = toUniversalPath(parentDir);
+    info.parent = toVirtualPath(path.dirname(filePath), root);
     info.name = path.basename(filePath);
 
     let stat;
     try {
         stat = fs.statSync(filePath);
     } catch {
-        // If we can't stat, return minimal info
         info.isReadable = false;
         info.isWritable = false;
         info.isExecutable = false;
@@ -60,20 +77,25 @@ function buildFileInfo(filePath) {
 /**
  * Build the DirectoryInfo response.
  * Mirrors com.net128.oss.web.lib.filemanager.DirectoryInfo.
+ *
+ * @param {string} dirPath — real absolute path of the directory
+ * @param {string} [root='/'] — root jail directory
  */
-function buildDirectoryInfo(dirPath) {
+function buildDirectoryInfo(dirPath, root) {
+    root = root ? path.resolve(root) : '/';
+
     // Normalise
     dirPath = toPlatformPath(dirPath);
 
     if (!dirPath || !fs.existsSync(dirPath)) {
-        dirPath = '/';
+        dirPath = root;
     }
 
     let stat;
     try {
         stat = fs.statSync(dirPath);
     } catch {
-        dirPath = '/';
+        dirPath = root;
         stat = fs.statSync(dirPath);
     }
 
@@ -82,6 +104,11 @@ function buildDirectoryInfo(dirPath) {
     }
 
     const resolvedPath = path.resolve(dirPath);
+
+    // Ensure we don't go above root
+    if (!resolvedPath.startsWith(root)) {
+        return buildDirectoryInfo(root, root);
+    }
 
     // List & sort
     let entries;
@@ -93,21 +120,21 @@ function buildDirectoryInfo(dirPath) {
         entries = [];
     }
 
-    const files = entries.map(buildFileInfo);
-    const universalPath = toUniversalPath(resolvedPath);
+    const files = entries.map(f => buildFileInfo(f, root));
+    const virtualPath = toVirtualPath(resolvedPath, root);
 
     const result = {
-        name: path.basename(resolvedPath) || universalPath.replace(/:[/\\]$/, ''),
-        path: universalPath,
+        name: virtualPath === '/' ? '>' : path.basename(resolvedPath),
+        path: virtualPath,
         files,
     };
 
     // Writable?
     try { fs.accessSync(resolvedPath, fs.constants.W_OK); result.isWritable = true; } catch { result.isWritable = false; }
 
-    // Parent breadcrumbs (not for root)
-    if (universalPath !== '/') {
-        result.parentInfos = getParentInfo(resolvedPath);
+    // Parent breadcrumbs (not for virtual root)
+    if (virtualPath !== '/') {
+        result.parentInfos = getParentInfo(resolvedPath, root);
     }
 
     return result;
@@ -126,4 +153,3 @@ function toLocalISO(date) {
 }
 
 module.exports = { buildDirectoryInfo, buildFileInfo, toPlatformPath };
-

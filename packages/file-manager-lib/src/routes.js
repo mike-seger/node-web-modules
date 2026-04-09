@@ -14,7 +14,7 @@ const FileManagerService = require('./file-service');
  */
 function createRouter(options = {}) {
     const router = express.Router();
-    const service = new FileManagerService();
+    const service = new FileManagerService({ root: options.root });
     const upload = multer({ storage: multer.memoryStorage() });
 
     // ── Serve static UI ──
@@ -104,5 +104,4 @@ function createRouter(options = {}) {
 }
 
 module.exports = { createRouter };
-
 

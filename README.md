@@ -70,7 +70,8 @@ npx @nicemeta/file-manager --port 3000 --root /home/user/documents
 |---|---|---|
 | `--port`, `-p` | `8080` | Server port |
 | `--host`, `-H` | `0.0.0.0` | Listening host |
-| `--root`, `-r` | `/` | Root directory for file operations |
+| `--root`, `-r` | `.` (cwd) | Root directory for file operations |
+| `--ipv4`, `-4` | | Use IPv4 only |
 
 ## Using the Library
 
