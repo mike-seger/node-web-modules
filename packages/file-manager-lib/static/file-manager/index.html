@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Manager</title>
+    <link rel="stylesheet" href="css/file-manager.css">
+</head>
+
+<body>
+
+<p id="breadCrumb" class="breadcrumb"></p>
+
+<div id="content-pane">
+    <div id="drop-message">Drop files to upload</div>
+    <ul id="file-list" class="file-list"></ul>
+</div>
+
+<!-- Mobile-only upload button (touch devices without drag-and-drop) -->
+<button id="mobile-upload" title="Upload files"><i class="mi">upload</i></button>
+<input type="file" id="mobile-file-input" multiple style="display:none">
+
+<div id="zoom-control">
+    <label for="zoom-slider">Zoom</label>
+    <input type="range" id="zoom-slider" min="0.7" max="2" step="0.05" value="1">
+    <span id="zoom-value">100%</span>
+</div>
+
+<!-- Delete confirmation overlay -->
+<div id="confirm-overlay">
+    <div id="confirm-panel">
+        <div class="confirm-title"><i class="mi">delete</i> Confirm Delete</div>
+        <div class="confirm-message" id="confirm-message"></div>
+        <div class="confirm-buttons">
+            <button class="btn-cancel" id="confirm-cancel">Cancel</button>
+            <button class="btn-ok" id="confirm-ok">Delete</button>
+        </div>
+    </div>
+</div>
+
+<script>
+'use strict';
+
+const API = {
+    list:     'api/list?path=',
+    download: 'api/download?path=',
+    zip:      'api/zip?path=',
+    view:     'api/view?path=',
+    delete:   'api/delete?path=',
+    upload:   'api/upload?path='
+};
+const fmUri = '?path=';
+const ZOOM_BASE = 1.05; /* 100% displayed = 1.05× CSS scale */
+
+const contentPane = document.getElementById('content-pane');
+const fileList = document.getElementById('file-list');
+const breadCrumb = document.getElementById('breadCrumb');
+const dropMessage = document.getElementById('drop-message');
+const zoomSlider = document.getElementById('zoom-slider');
+const zoomValue = document.getElementById('zoom-value');
+const mobileUpload = document.getElementById('mobile-upload');
+const mobileFileInput = document.getElementById('mobile-file-input');
+const confirmOverlay = document.getElementById('confirm-overlay');
+const confirmMessage = document.getElementById('confirm-message');
+const confirmOk = document.getElementById('confirm-ok');
+const confirmCancel = document.getElementById('confirm-cancel');
+
+let currentPath = '';
+let currentWritable = false;
+let dragCounter = 0;
+let scrollDebounce = null;
+let pendingDeleteUrl = null;
+
+/* ===== Encoding ===== */
+function encodePath(path) {
+    return encodeURIComponent(path).replace(/%2F/g, '/');
+}
+
+/* ===== Formatting helpers ===== */
+function formatSize(bytes) {
+    if (bytes == null) return '\u2014';
+    if (bytes === 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    const val = bytes / Math.pow(1024, i);
+    return (i === 0 ? val : val.toFixed(2)) + ' ' + units[i];
+}
+
+function timeAgo(dateVal) {
+    if (!dateVal) return '';
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return '';
+    const seconds = Math.floor((Date.now() - d.getTime()) / 1000);
+    if (seconds < 60) return 'just now';
+    const intervals = [
+        [31536000, 'year'], [2592000, 'month'], [86400, 'day'],
+        [3600, 'hour'], [60, 'minute']
+    ];
+    for (const [secs, label] of intervals) {
+        const count = Math.floor(seconds / secs);
+        if (count >= 1) return count === 1 ? ('a ' + label + ' ago') : (count + ' ' + label + 's ago');
+    }
+    return 'just now';
+}
+
+/* ===== Zoom persistence ===== */
+function applyZoom(value) {
+    const cssZoom = value * ZOOM_BASE;
+    document.documentElement.style.setProperty('--zoom', cssZoom);
+    zoomSlider.value = value;
+    zoomValue.textContent = Math.round(value * 100) + '%';
+    localStorage.setItem('fm-zoom', value);
+}
+
+(function initZoom() {
+    const saved = localStorage.getItem('fm-zoom');
+    const min = parseFloat(zoomSlider.min);
+    const max = parseFloat(zoomSlider.max);
+    const val = saved ? Math.min(max, Math.max(min, parseFloat(saved))) : 1;
+    applyZoom(val);
+})();
+
+zoomSlider.addEventListener('input', () => applyZoom(parseFloat(zoomSlider.value)));
+
+/* ===== Scroll persistence ===== */
+function saveScroll() {
+    if (currentPath !== undefined) {
+        localStorage.setItem('fm-scroll-' + currentPath, fileList.scrollTop);
+    }
+}
+function restoreScroll() {
+    const saved = localStorage.getItem('fm-scroll-' + currentPath);
+    if (saved) fileList.scrollTop = parseInt(saved, 10);
+}
+
+fileList.addEventListener('scroll', () => {
+    clearTimeout(scrollDebounce);
+    scrollDebounce = setTimeout(saveScroll, 200);
+});
+
+/* ===== Upload via fetch ===== */
+function uploadFiles(files, targetPath) {
+    if (!files || files.length === 0) return;
+    const formData = new FormData();
+    for (const file of files) {
+        formData.append('file', file);
+    }
+    const url = API.upload + encodePath(targetPath);
+    fetch(url, { method: 'POST', body: formData })
+        .then(() => loadDirectory(currentPath))
+        .catch(err => console.error('Upload failed:', err));
+}
+
+/* ===== Drag & drop on content pane ===== */
+// Prevent browser from opening dropped files
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', e => e.preventDefault());
+
+contentPane.addEventListener('dragenter', e => {
+    e.preventDefault();
+    dragCounter++;
+    if (dragCounter === 1) {
+        contentPane.classList.add(currentWritable ? 'drop-zone-active' : 'drop-zone-reject');
+        dropMessage.textContent = currentWritable ? 'Drop files to upload' : 'This folder is read-only';
+    }
+});
+
+contentPane.addEventListener('dragover', e => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = currentWritable ? 'copy' : 'none';
+});
+
+contentPane.addEventListener('dragleave', e => {
+    e.preventDefault();
+    dragCounter--;
+    if (dragCounter <= 0) {
+        dragCounter = 0;
+        contentPane.classList.remove('drop-zone-active', 'drop-zone-reject');
+    }
+});
+
+contentPane.addEventListener('drop', e => {
+    e.preventDefault();
+    dragCounter = 0;
+    contentPane.classList.remove('drop-zone-active', 'drop-zone-reject');
+    if (currentWritable && e.dataTransfer.files.length > 0) {
+        uploadFiles(e.dataTransfer.files, currentPath);
+    }
+});
+
+/* ===== Mobile upload button ===== */
+mobileUpload.addEventListener('click', () => mobileFileInput.click());
+mobileFileInput.addEventListener('change', () => {
+    if (mobileFileInput.files.length > 0 && currentWritable) {
+        uploadFiles(mobileFileInput.files, currentPath);
+        mobileFileInput.value = '';
+    }
+});
+
+/* ===== Delete confirmation ===== */
+function requestDelete(deleteUrl, fileName) {
+    pendingDeleteUrl = deleteUrl;
+    confirmMessage.textContent = 'Are you sure you want to delete \u201c' + fileName + '\u201d?';
+    confirmOverlay.classList.add('visible');
+}
+
+confirmOk.addEventListener('click', () => {
+    confirmOverlay.classList.remove('visible');
+    if (pendingDeleteUrl) {
+        fetch(pendingDeleteUrl, { method: 'DELETE' })
+            .then(() => { pendingDeleteUrl = null; loadDirectory(currentPath); })
+            .catch(err => { pendingDeleteUrl = null; console.error('Delete failed:', err); });
+    }
+});
+
+confirmCancel.addEventListener('click', () => {
+    confirmOverlay.classList.remove('visible');
+    pendingDeleteUrl = null;
+});
+
+confirmOverlay.addEventListener('click', e => {
+    if (e.target === confirmOverlay) {
+        confirmOverlay.classList.remove('visible');
+        pendingDeleteUrl = null;
+    }
+});
+
+document.addEventListener('keydown', e => {
+    if (!confirmOverlay.classList.contains('visible')) return;
+    if (e.key === 'Escape') { confirmCancel.click(); }
+    else if (e.key === 'Enter') { confirmOk.click(); }
+});
+
+/* ===== Build UI elements ===== */
+function createItemTools(fileUri, fileName, isDirectory, isWritable, hasChildren) {
+    const tools = document.createElement('span');
+    tools.classList.add('item-tool');
+
+    const dl = document.createElement('a');
+    dl.classList.add('download', 'mi');
+    dl.href = isDirectory ? (API.zip + fileUri) : (API.download + fileUri);
+    dl.title = 'Download';
+    dl.textContent = 'download';
+    tools.appendChild(dl);
+
+    if (!isDirectory) {
+        const vw = document.createElement('a');
+        vw.classList.add('view', 'mi');
+        vw.href = API.view + fileUri;
+        vw.target = '_blank';
+        vw.title = 'View';
+        vw.textContent = 'open_in_new';
+        tools.appendChild(vw);
+    }
+
+    if (!hasChildren && isWritable) {
+        const del = document.createElement('a');
+        del.classList.add('delete', 'mi');
+        del.href = 'javascript:void(0)';
+        del.title = 'Delete';
+        del.textContent = 'delete';
+        del.addEventListener('click', e => {
+            e.preventDefault();
+            requestDelete(API.delete + fileUri, fileName);
+        });
+        tools.appendChild(del);
+    }
+
+    return tools;
+}
+
+function createItem(file) {
+    const fileUri = file.parent
+        ? encodePath(file.parent + (file.parent.endsWith('/') ? '' : '/') + file.name)
+        : file.name;
+
+    const li = document.createElement('li');
+    li.classList.add(file.isDirectory ? 'directory' : 'file');
+
+    /* Icon — folders are filled, files are outlined */
+    const icon = document.createElement('i');
+    icon.classList.add('mi', 'card-icon');
+    if (file.isDirectory) {
+        icon.classList.add('mi-filled');
+        icon.textContent = 'folder';
+    } else {
+        icon.textContent = 'description';
+    }
+
+    /* Info block (name + meta) */
+    const info = document.createElement('div');
+    info.classList.add('card-info');
+
+    const nameSpan = document.createElement('span');
+    nameSpan.classList.add('name');
+    nameSpan.textContent = file.isDirectory ? file.name.replace(/:[/]$/, '') : file.name;
+    info.appendChild(nameSpan);
+
+    const sizeMeta = document.createElement('span');
+    sizeMeta.classList.add('meta');
+    sizeMeta.textContent = file.isDirectory ? '\u2014' : formatSize(file.length);
+    info.appendChild(sizeMeta);
+
+    if (file.modified) {
+        const dateMeta = document.createElement('span');
+        dateMeta.classList.add('meta');
+        dateMeta.textContent = timeAgo(file.modified);
+        info.appendChild(dateMeta);
+    }
+
+    /* Wrap icon + info in a link (directories) or span (files) */
+    if (file.isDirectory) {
+        const link = document.createElement('a');
+        link.classList.add('card-link');
+        link.href = 'javascript:void(0)';
+        link.addEventListener('click', () => navigateTo(fileUri));
+        link.appendChild(icon);
+        link.appendChild(info);
+        li.appendChild(link);
+    } else {
+        const wrap = document.createElement('span');
+        wrap.classList.add('card-content');
+        wrap.appendChild(icon);
+        wrap.appendChild(info);
+        li.appendChild(wrap);
+    }
+
+    li.appendChild(createItemTools(fileUri, file.name, file.isDirectory, file.isWritable, file.hasChildren));
+
+    /* Per-folder drag-and-drop target */
+    if (file.isDirectory) {
+        let folderDragCounter = 0;
+
+        li.addEventListener('dragenter', e => {
+            e.preventDefault();
+            e.stopPropagation();
+            folderDragCounter++;
+            if (folderDragCounter === 1 && file.isWritable) {
+                li.classList.add('folder-drop-hover');
+            }
+        });
+
+        li.addEventListener('dragover', e => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.dataTransfer.dropEffect = file.isWritable ? 'copy' : 'none';
+        });
+
+        li.addEventListener('dragleave', e => {
+            e.preventDefault();
+            e.stopPropagation();
+            folderDragCounter--;
+            if (folderDragCounter <= 0) {
+                folderDragCounter = 0;
+                li.classList.remove('folder-drop-hover');
+            }
+        });
+
+        li.addEventListener('drop', e => {
+            e.preventDefault();
+            e.stopPropagation();
+            folderDragCounter = 0;
+            li.classList.remove('folder-drop-hover');
+            dragCounter = 0;
+            contentPane.classList.remove('drop-zone-active', 'drop-zone-reject');
+            if (file.isWritable && e.dataTransfer.files.length > 0) {
+                const folderPath = file.parent
+                    ? file.parent + (file.parent.endsWith('/') ? '' : '/') + file.name
+                    : file.name;
+                uploadFiles(e.dataTransfer.files, folderPath);
+            }
+        });
+    }
+
+    return li;
+}
+
+function createSectionHeader(text) {
+    const li = document.createElement('li');
+    li.classList.add('section-header');
+    li.textContent = text;
+    return li;
+}
+
+function createBreadCrumb(parentInfos, name) {
+    const span = document.createElement('span');
+    if (!parentInfos) return span;
+
+    parentInfos.slice().reverse().forEach(info => {
+        const a = document.createElement('a');
+        a.href = 'javascript:void(0)';
+        a.addEventListener('click', () => navigateTo(info.path));
+        a.textContent = info.name;
+        span.appendChild(a);
+        span.appendChild(document.createTextNode(' / '));
+    });
+    span.appendChild(document.createTextNode(name));
+    return span;
+}
+
+/* ===== Directory loading (no history push) ===== */
+function loadDirectory(path) {
+    fetch(API.list + encodePath(path))
+        .then(r => r.json())
+        .then(data => {
+            currentWritable = data.isWritable;
+            contentPane.dataset.writable = data.isWritable;
+
+            /* Breadcrumb */
+            breadCrumb.innerHTML = '';
+            breadCrumb.style.display = data.path === '/' ? 'none' : '';
+            breadCrumb.appendChild(createBreadCrumb(data.parentInfos, data.name));
+
+            /* File list with section headers */
+            fileList.innerHTML = '';
+            const showDotFiles = false;
+            if (data.files && data.files.length > 0) {
+                const dirs = [];
+                const files = [];
+                data.files.forEach(file => {
+                    const isDot = file.name.startsWith('.');
+                    if (!isDot || showDotFiles) {
+                        (file.isDirectory ? dirs : files).push(file);
+                    }
+                });
+
+                if (dirs.length > 0) {
+                    fileList.appendChild(createSectionHeader('Folders'));
+                    dirs.forEach(file => fileList.appendChild(createItem(file)));
+                }
+                if (files.length > 0) {
+                    fileList.appendChild(createSectionHeader('Files'));
+                    files.forEach(file => fileList.appendChild(createItem(file)));
+                }
+            }
+
+            requestAnimationFrame(restoreScroll);
+        });
+}
+
+/* ===== Navigation (pushes history) ===== */
+function navigateTo(path) {
+    saveScroll();
+    currentPath = path || '';
+    window.history.pushState(currentPath, '', fmUri + encodePath(currentPath));
+    loadDirectory(currentPath);
+}
+
+/* ===== Browser back/forward ===== */
+window.addEventListener('popstate', e => {
+    saveScroll();
+    currentPath = e.state != null ? e.state : '';
+    loadDirectory(currentPath);
+});
+
+/* ===== Init ===== */
+const params = new URLSearchParams(window.location.search);
+const initPath = params.has('path') ? params.get('path') : '';
+currentPath = initPath;
+window.history.replaceState(initPath, '', fmUri + encodePath(initPath));
+loadDirectory(initPath);
+</script>
+</body>
+</html>

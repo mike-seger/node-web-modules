@@ -1,0 +1,219 @@
+openapi: 3.0.3
+info:
+  title: File Manager API
+  description: File system browsing, upload, download, and management
+  version: 0.1.0
+servers:
+  - url: /
+tags:
+  - name: File Manager
+    description: File system browsing, upload, download, and management
+paths:
+  /file-manager/api/list:
+    get:
+      tags: [File Manager]
+      summary: List directory contents
+      description: Returns the contents of the specified directory including file metadata
+      parameters:
+        - name: path
+          in: query
+          description: Absolute path of the directory to list
+          schema:
+            type: string
+            default: /
+      responses:
+        '200':
+          description: Directory listing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DirectoryInfo'
+
+  /file-manager/api/download:
+    get:
+      tags: [File Manager]
+      summary: Download a file
+      description: Downloads the specified file as an attachment
+      parameters:
+        - name: path
+          in: query
+          required: true
+          description: Absolute path of the file to download
+          schema:
+            type: string
+      responses:
+        '200':
+          description: File content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Path is not a file
+
+  /file-manager/api/zip:
+    get:
+      tags: [File Manager]
+      summary: Download as ZIP
+      description: Downloads the specified file or directory as a ZIP archive
+      parameters:
+        - name: path
+          in: query
+          required: true
+          description: Absolute path of the file or directory to zip
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ZIP archive
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+
+  /file-manager/api/view:
+    get:
+      tags: [File Manager]
+      summary: View a file inline
+      description: Returns the file content for inline viewing in the browser
+      parameters:
+        - name: path
+          in: query
+          required: true
+          description: Absolute path of the file to view
+          schema:
+            type: string
+      responses:
+        '200':
+          description: File content (inline)
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Path is not a file
+
+  /file-manager/api/delete:
+    delete:
+      tags: [File Manager]
+      summary: Delete a file or directory
+      description: Recursively deletes the specified file or directory
+      parameters:
+        - name: path
+          in: query
+          required: true
+          description: Absolute path of the file or directory to delete
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Successfully deleted
+
+  /file-manager/api/upload:
+    post:
+      tags: [File Manager]
+      summary: Upload files to a directory
+      description: Uploads one or more files to the specified directory
+      parameters:
+        - name: path
+          in: query
+          required: true
+          description: Absolute path of the target directory
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+      responses:
+        '200':
+          description: Files uploaded successfully
+
+  /file-manager/api/mode:
+    put:
+      tags: [File Manager]
+      summary: Change file permissions
+      description: "Changes read/write/execute permissions. Mode format: +rwx or -rwx"
+      parameters:
+        - name: path
+          in: query
+          required: true
+          description: Absolute path of the file
+          schema:
+            type: string
+        - name: mode
+          in: query
+          required: true
+          description: "Permission mode (e.g. +rw, -x)"
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Permissions changed
+
+components:
+  schemas:
+    DirectoryInfo:
+      type: object
+      properties:
+        name:
+          type: string
+        path:
+          type: string
+        isWritable:
+          type: boolean
+        parentInfos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ParentInfo'
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileInfo'
+
+    ParentInfo:
+      type: object
+      properties:
+        path:
+          type: string
+        name:
+          type: string
+
+    FileInfo:
+      type: object
+      properties:
+        parent:
+          type: string
+        name:
+          type: string
+        length:
+          type: integer
+          format: int64
+        isDirectory:
+          type: boolean
+        isReadable:
+          type: boolean
+        isWritable:
+          type: boolean
+        isExecutable:
+          type: boolean
+        hasChildren:
+          type: boolean
+        modified:
+          type: string
+          description: ISO local date-time (no timezone)
+        created:
+          type: string
+          description: ISO local date-time (no timezone)
+

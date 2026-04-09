@@ -1,0 +1,34 @@
+{
+  "name": "@nicemeta/file-manager-lib",
+  "version": "0.6.2",
+  "description": "File manager Express router — browse, upload, download, and manage files on the host file system",
+  "main": "src/index.js",
+  "files": [
+    "src/",
+    "static/",
+    "dist/"
+  ],
+  "keywords": [
+    "file-manager",
+    "file-browser",
+    "express",
+    "upload",
+    "download"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "build": "node build.js",
+    "clean": "rm -rf dist",
+    "start": "node -e \"const e=require('express'),{createRouter}=require('./src/index');const a=e();a.use(createRouter());a.listen(8080,()=>console.log('http://localhost:8080/file-manager/index.html'))\""
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "multer": "^2.0.1",
+    "yazl": "^2.5.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
+
+

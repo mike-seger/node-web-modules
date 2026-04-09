@@ -1,0 +1,37 @@
+{
+  "name": "@nicemeta/file-manager",
+  "version": "0.6.2",
+  "description": "File manager web application",
+  "main": "src/app.js",
+  "bin": {
+    "file-manager": "bin/cli.js"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "static/",
+    "dist/"
+  ],
+  "keywords": [
+    "file-manager",
+    "file-browser",
+    "upload",
+    "download",
+    "cli"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "build": "node build.js",
+    "clean": "rm -rf dist",
+    "start": "node bin/cli.js",
+    "start:prod": "node dist/cli.cjs"
+  },
+  "dependencies": {
+    "@nicemeta/file-manager-lib": "^0.6.2",
+    "express": "^5.1.0",
+    "js-yaml": "^4.1.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

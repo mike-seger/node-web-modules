@@ -92,7 +92,3 @@ app.listen(8080);
 ## License
 
 MIT
-
-
-
-# node-web-modules

@@ -1,0 +1,462 @@
+/* ============================================================
+   File Manager — Dark Navy Card Theme
+   Inspired by github.com/Teraskull/file-browser-modern-theme
+   ============================================================ */
+
+/* --- Material Symbols (reduced subset) --- */
+@font-face {
+    font-family: 'Material Symbols';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('../fonts/symbols.woff2') format('woff2');
+}
+
+/* --- Custom properties --- */
+:root {
+    --bg:           #0d1117;
+    --bg-card:      #151c2c;
+    --bg-card-hover:#1c2438;
+    --bg-surface:   #151c2c;
+    --bg-hover:     #1c2438;
+    --bg-active:    #243044;
+    --text:         #e0e6ed;
+    --text-muted:   #546178;
+    --accent:       #6c7ee1;
+    --accent-hover: #8b9bf0;
+    --icon-color:   #6c7ee1;
+    --delete-color: #df4d4d;
+    --drop-ok:      #4caf50;
+    --drop-reject:  #f44336;
+    --radius:       10px;
+    --radius-sm:    6px;
+    --transition:   0.18s ease;
+    --zoom:         1;
+}
+
+/* --- Reset --- */
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    height: 100%;
+    overflow: hidden;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    padding: 16px 24px;
+    gap: 8px;
+}
+
+a {
+    color: var(--accent);
+    text-decoration: none;
+    transition: color var(--transition);
+}
+a:hover { color: var(--accent-hover); }
+
+/* --- Breadcrumb --- */
+.breadcrumb {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 2px;
+    padding: 6px 8px;
+    font-size: 13px;
+    min-height: 32px;
+    flex-shrink: 0;
+}
+.breadcrumb a {
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    transition: background var(--transition), color var(--transition);
+    color: var(--text);
+}
+.breadcrumb a:hover {
+    background: var(--bg-hover);
+    color: var(--accent-hover);
+}
+
+/* --- Content pane (drop zone wrapper) --- */
+#content-pane {
+    flex: 1;
+    overflow: hidden;
+    border-radius: var(--radius);
+    border: 2px solid transparent;
+    transition: border-color 0.25s ease, box-shadow 0.25s ease;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Drop-zone visual feedback */
+#content-pane.drop-zone-active {
+    border-color: var(--drop-ok);
+    box-shadow: inset 0 0 40px rgba(76, 175, 80, 0.10);
+}
+#content-pane.drop-zone-reject {
+    border-color: var(--drop-reject);
+    box-shadow: inset 0 0 40px rgba(244, 67, 54, 0.10);
+}
+
+/* --- File list --- */
+.file-list {
+    list-style: none;
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 4px 0;
+
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    grid-auto-rows: min-content;
+    gap: 12px;
+    align-content: start;
+
+    /* Seamless zoom via CSS transform */
+    transform: scale(var(--zoom));
+    transform-origin: top left;
+    width: calc(100% / var(--zoom));
+    height: calc(100% / var(--zoom));
+}
+
+/* Scrollbar */
+.file-list::-webkit-scrollbar { width: 6px; }
+.file-list::-webkit-scrollbar-track { background: transparent; }
+.file-list::-webkit-scrollbar-thumb {
+    background: #2a3548;
+    border-radius: 3px;
+}
+.file-list::-webkit-scrollbar-thumb:hover { background: #3a4a60; }
+
+/* --- Section headers --- */
+.file-list .section-header {
+    grid-column: 1 / -1;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    padding: 8px 4px 0;
+    border: none;
+    background: none;
+    min-height: auto;
+    cursor: default;
+}
+.file-list .section-header:hover {
+    background: none;
+}
+
+/* --- Card items (files & directories) --- */
+.file-list li {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 16px;
+    border-radius: var(--radius);
+    background: var(--bg-card);
+    cursor: default;
+    transition: background var(--transition);
+    min-height: 72px;
+    overflow: hidden;
+    position: relative;
+}
+.file-list li:hover {
+    background: var(--bg-card-hover);
+}
+
+/* Folder drop highlight */
+.file-list li.folder-drop-hover {
+    background: rgba(76, 175, 80, 0.12);
+    outline: 2px solid var(--drop-ok);
+    outline-offset: -2px;
+}
+
+/* --- Icons (Material Symbols ligatures) --- */
+.mi {
+    font-family: 'Material Symbols';
+    font-style: normal;
+    font-weight: normal;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: 'liga';
+    font-variation-settings: 'FILL' 0, 'GRAD' 0, 'opsz' 48, 'wght' 400;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    vertical-align: middle;
+}
+
+.mi-filled {
+    font-variation-settings: 'FILL' 1, 'GRAD' 0, 'opsz' 48, 'wght' 400;
+}
+
+/* Card icon (large) */
+.card-icon {
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    font-size: 44px;
+    line-height: 1;
+    color: var(--icon-color);
+}
+
+/* --- Card info (name + meta) --- */
+.card-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.card-info .name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.card-info .meta {
+    font-size: 11px;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Directory card link styling */
+.directory .card-link {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    color: var(--text);
+    flex: 1;
+    min-width: 0;
+}
+.directory .card-link:hover {
+    color: var(--text);
+}
+.directory .card-link:hover .name {
+    color: var(--accent-hover);
+}
+
+/* File card content wrapper */
+.file .card-content {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex: 1;
+    min-width: 0;
+}
+
+/* --- Item tools (download / view / delete) --- */
+.item-tool {
+    display: none;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    position: absolute;
+    top: 6px;
+    right: 6px;
+}
+li:hover .item-tool {
+    display: inline-flex;
+}
+
+.item-tool a {
+    font-size: 18px;
+    opacity: 0.5;
+    transition: opacity var(--transition), color var(--transition);
+    padding: 3px;
+    line-height: 1;
+    border-radius: 4px;
+    color: var(--text-muted);
+}
+.item-tool a:hover {
+    opacity: 1;
+    background: var(--bg-active);
+}
+.item-tool a.delete       { color: var(--delete-color); opacity: 0.6; }
+.item-tool a.delete:hover { color: #ff6b6b; opacity: 1; }
+.item-tool a.download:hover { color: var(--accent-hover); }
+.item-tool a.view:hover   { color: var(--text); }
+
+/* --- Zoom control --- */
+#zoom-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    flex-shrink: 0;
+    font-size: 11px;
+    color: var(--text-muted);
+    user-select: none;
+}
+#zoom-control label { white-space: nowrap; }
+#zoom-control input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100px;
+    height: 3px;
+    background: #1c2438;
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+}
+#zoom-control input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    background: var(--accent);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background var(--transition);
+}
+#zoom-control input[type="range"]::-webkit-slider-thumb:hover {
+    background: var(--accent-hover);
+}
+#zoom-control input[type="range"]::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    background: var(--accent);
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+}
+#zoom-control span {
+    min-width: 32px;
+    text-align: right;
+}
+
+/* --- Mobile upload fab --- */
+#mobile-upload {
+    display: none;
+}
+@media (pointer: coarse) {
+    #mobile-upload {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        position: fixed;
+        bottom: 60px;
+        right: 20px;
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: var(--accent);
+        color: #fff;
+        font-size: 24px;
+        border: none;
+        cursor: pointer;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.5);
+        z-index: 100;
+    }
+    #mobile-upload .mi { font-size: 24px; }
+    #mobile-upload:hover { background: var(--accent-hover); }
+}
+
+/* --- Drag overlay message --- */
+#drop-message {
+    display: none;
+    position: absolute;
+    inset: 0;
+    background: rgba(13, 17, 23, 0.88);
+    color: var(--text);
+    font-size: 18px;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius);
+    pointer-events: none;
+    z-index: 10;
+}
+#content-pane.drop-zone-active #drop-message,
+#content-pane.drop-zone-reject #drop-message {
+    display: flex;
+}
+
+/* --- Delete confirmation overlay --- */
+#confirm-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: rgba(0, 0, 0, 0.6);
+    align-items: center;
+    justify-content: center;
+}
+#confirm-overlay.visible {
+    display: flex;
+}
+#confirm-panel {
+    background: var(--bg-card);
+    border: 1px solid #1c2438;
+    border-radius: var(--radius);
+    padding: 24px 28px;
+    min-width: 320px;
+    max-width: 440px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+#confirm-panel .confirm-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+#confirm-panel .confirm-title .mi {
+    color: var(--delete-color);
+    font-size: 22px;
+}
+#confirm-panel .confirm-message {
+    font-size: 13px;
+    color: var(--text-muted);
+    word-break: break-all;
+}
+#confirm-panel .confirm-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 4px;
+}
+#confirm-panel button {
+    padding: 6px 20px;
+    border-radius: var(--radius-sm);
+    border: 1px solid #1c2438;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background var(--transition), border-color var(--transition);
+}
+#confirm-panel .btn-cancel {
+    background: var(--bg-hover);
+    color: var(--text);
+}
+#confirm-panel .btn-cancel:hover {
+    background: var(--bg-active);
+}
+#confirm-panel .btn-ok {
+    background: var(--delete-color);
+    color: #fff;
+    border-color: var(--delete-color);
+}
+#confirm-panel .btn-ok:hover {
+    background: #e85858;
+    border-color: #e85858;
+}
+

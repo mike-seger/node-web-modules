@@ -1,0 +1,23 @@
+{
+  "name": "node-web-modules",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.4"
+  },
+  "scripts": {
+    "start": "npm start -w packages/file-manager-app",
+    "build": "npm run build --workspaces --if-present",
+    "clean": "npm run clean --workspaces --if-present",
+    "test": "npm test --workspaces --if-present",
+    "publish:all": "npm run build && npm publish --access public -w packages/file-manager-lib && npm publish --access public -w packages/file-manager-app"
+  }
+}
+
+
