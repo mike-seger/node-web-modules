@@ -12,16 +12,22 @@ A collection of Node.js web utility modules — a reimplementation of the Java-b
 ## Quick Start
 
 ```bash
+npx @nicemeta/file-manager --port 8080
+```
+
+Then open:
+- **File Manager**: http://localhost:8080/file-manager/index.html
+- **API docs**: http://localhost:8080/file-manager/swagger-ui/index.html
+
+## Development
+
+```bash
 # Install dependencies
 npm install
 
 # Start the file manager (dev mode)
 npm start
 ```
-
-Then open:
-- **File Manager**: http://localhost:8080/file-manager/index.html
-- **Swagger UI**: http://localhost:8080/swagger-ui/index.html
 
 ## Production Build
 
@@ -50,6 +56,12 @@ npm run clean
 ```bash
 npm install -g @nicemeta/file-manager
 file-manager --port 3000 --root /home/user/documents
+```
+
+Or run directly without installing:
+
+```bash
+npx @nicemeta/file-manager --port 3000 --root /home/user/documents
 ```
 
 ## CLI Options
