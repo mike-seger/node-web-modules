@@ -1,6 +1,6 @@
 {
   "name": "@nicemeta/file-manager-lib",
-  "version": "0.6.3",
+  "version": "0.6.4",
   "description": "File manager Express router — browse, upload, download, and manage files on the host file system",
   "main": "src/index.js",
   "files": [

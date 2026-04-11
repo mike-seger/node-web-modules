@@ -12,12 +12,38 @@ A collection of Node.js web utility modules — a reimplementation of the Java-b
 ## Quick Start
 
 ```bash
-npx @nicemeta/file-manager --port 8080
+npx @nicemeta/file-manager
 ```
 
-Then open:
-- **File Manager**: http://localhost:8080/file-manager/index.html
-- **API docs**: http://localhost:8080/file-manager/swagger-ui/index.html
+Then open: http://127.0.0.1:12001/file-manager/index.html
+
+## CLI Options
+
+```
+$ file-manager --help
+
+Usage: file-manager [options]
+
+Options:
+  -p, --port <n>     Server port (default: 12001)
+  -H, --host <addr>  Listening host (default: 127.0.0.1)
+  -r, --root <path>  Root directory (default: current directory)
+  -v, --version      Show version
+  -h, --help         Show this help
+```
+
+## Global Install
+
+```bash
+npm install -g @nicemeta/file-manager
+file-manager --port 3000 --root /home/user/documents
+```
+
+Or run directly without installing:
+
+```bash
+npx @nicemeta/file-manager --port 3000 --root /home/user/documents
+```
 
 ## Development
 
@@ -36,42 +62,20 @@ npm start
 npm run build
 
 # Run the production build (fully self-contained, no npm install needed)
-node packages/file-manager-app/dist/cli.cjs --port 8080
+node packages/file-manager-app/dist/cli.cjs
 ```
 
 The build uses [esbuild](https://esbuild.github.io/) to:
-- Bundle & minify all server JS into a single `cli.cjs` (~1.4 MB)
+- Bundle & minify all server JS into a single `cli.cjs` (~420 KB)
 - Minify CSS and inline HTML scripts
-- Copy static assets (UI, fonts, Swagger dark theme)
+- Copy static assets (UI, fonts)
 
-The production `dist/` is **fully self-contained** (1.5 MB total) — just copy it and run with `node cli.cjs`. Swagger UI loads from CDN at runtime.
+The production `dist/` is **fully self-contained** (~460 KB total) — just copy it and run with `node cli.cjs`.
 
 ```bash
 # Clean build artifacts
 npm run clean
 ```
-
-## Global Install
-
-```bash
-npm install -g @nicemeta/file-manager
-file-manager --port 3000 --root /home/user/documents
-```
-
-Or run directly without installing:
-
-```bash
-npx @nicemeta/file-manager --port 3000 --root /home/user/documents
-```
-
-## CLI Options
-
-| Flag | Default | Description |
-|---|---|---|
-| `--port`, `-p` | `8080` | Server port |
-| `--host`, `-H` | `0.0.0.0` | Listening host |
-| `--root`, `-r` | `.` (cwd) | Root directory for file operations |
-| `--ipv4`, `-4` | | Use IPv4 only |
 
 ## Using the Library
 
@@ -80,8 +84,8 @@ const express = require('express');
 const { createRouter } = require('@nicemeta/file-manager-lib');
 
 const app = express();
-app.use(createRouter());
-app.listen(8080);
+app.use(createRouter({ root: '/home/user/documents' }));
+app.listen(12001);
 ```
 
 ## Features
@@ -94,7 +98,8 @@ app.listen(8080);
 - Breadcrumb navigation with browser history integration
 - Zoom slider with session persistence
 - Mobile upload support (FAB button)
-- Swagger/OpenAPI documentation with dark theme
+- OpenAPI documentation with dark theme
+- Root directory jail (path containment)
 - Cross-platform (macOS, Linux, Windows)
 
 ## System Requirements

@@ -1,6 +1,6 @@
 {
   "name": "@nicemeta/file-manager",
-  "version": "0.6.3",
+  "version": "0.6.4",
   "description": "File manager web application",
   "main": "src/app.js",
   "bin": {
@@ -27,7 +27,7 @@
     "start:prod": "node dist/cli.cjs"
   },
   "dependencies": {
-    "@nicemeta/file-manager-lib": "^0.6.3",
+    "@nicemeta/file-manager-lib": "^0.6.4",
     "express": "^5.1.0",
     "js-yaml": "^4.1.0"
   },
